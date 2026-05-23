@@ -10,7 +10,6 @@
 IMAGE_BASE_URL="https://api.apimart.ai"
 IMAGE_API_KEY="你的生图接口密钥"
 IMAGE_MODEL="gpt-image-2"
-IMAGE_GENERATION_COUNT="9"
 
 CHAT_BASE_URL="你的对话接口 Base URL"
 CHAT_API_KEY="你的对话接口密钥"
@@ -53,7 +52,14 @@ uv run image "星空下的古老城堡"
 
 生成完成后，图片会保存到同目录的 `output/` 文件夹。
 
-运行 `main.py` 自动生成产品图时，`IMAGE_GENERATION_COUNT` 控制一次生成几张图，默认是 9。每次运行会在 `output/` 下创建一个本次专属文件夹，所有图片都会放到同一个文件夹里。
+批量生成多张图时，先在 `output/` 下创建一个本次专属文件夹，然后每次调用 `uv run image` 都传入同一个 `--output-dir`。例如生成 9 张图，就是同一个文件夹里 9 张图。
+
+```bash
+RUN_DIR="output/$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$RUN_DIR"
+uv run image "第一张图片提示词" --image-file ./input.png --output-dir "$RUN_DIR"
+uv run image "第二张图片提示词" --image-file ./input.png --output-dir "$RUN_DIR"
+```
 
 生成 2K 横图：
 
@@ -78,4 +84,5 @@ prompt              必填，图片生成提示词
 --image-file        本地参考图路径，会自动转成 base64 data URI，可重复传入
 --official-fallback 请求失败时允许使用官方渠道兜底
 --timeout           轮询超时时间秒数，默认 180
+--output-dir        图片保存目录；不传则在 output 下按当前时间创建子文件夹
 ```
