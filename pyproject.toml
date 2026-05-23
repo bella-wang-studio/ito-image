@@ -1,0 +1,18 @@
+[project]
+name = "ito-image"
+version = "0.1.0"
+description = "GPT-Image-2 image generation helper"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+chat = "src.chat:main"
+image = "src.generate_image:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["src/chat.py", "src/generate_image.py"]
