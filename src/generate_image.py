@@ -86,6 +86,11 @@ def parse_args() -> argparse.Namespace:
         default=180,
         help="轮询超时时间秒数，默认 180",
     )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="图片保存目录；不传则在 output 下按当前时间创建子文件夹",
+    )
     return parser.parse_args()
 
 
@@ -232,12 +237,13 @@ def download_images(
     output_dir: Path = OUTPUT_DIR,
 ) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
+    filename_task_id = task_id_filename_stem(task_id)
     paths: list[Path] = []
     for index, url in enumerate(urls, start=1):
         suffix = suffix_from_url(url) or ".png"
         if suffix == ".jpeg":
             suffix = ".jpg"
-        filename = f"{task_id}{suffix}" if len(urls) == 1 else f"{task_id}-{index}{suffix}"
+        filename = f"{image_filename_stem(url, filename_task_id, index)}{suffix}"
         path = output_dir / filename
         request = urllib.request.Request(
             url,
@@ -258,6 +264,18 @@ def download_images(
             raise ApiError(f"下载图片失败 {url}: {exc.reason}") from exc
         paths.append(path)
     return paths
+
+
+def task_id_filename_stem(task_id: str) -> str:
+    return task_id.removeprefix("task_")
+
+
+def image_filename_stem(url: str, task_id: str, index: int) -> str:
+    stem = Path(urllib.parse.urlparse(url).path).stem
+    marker = "task_"
+    if marker in stem:
+        return stem.rsplit(marker, 1)[1]
+    return f"{task_id}_{index - 1}"
 
 
 def suffix_from_url(url: str) -> str:
@@ -299,7 +317,7 @@ def main() -> int:
         print(f"任务已提交: {task_id}", flush=True)
         task = poll_task(args, api_key, task_id)
         urls = collect_image_urls(task)
-        paths = download_images(urls, task_id, timestamped_output_dir())
+        paths = download_images(urls, task_id, args.output_dir or timestamped_output_dir())
     except (ApiError, TimeoutError) as exc:
         print(f"错误: {exc}", file=sys.stderr)
         return 1
