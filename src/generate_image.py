@@ -226,15 +226,19 @@ def collect_image_urls(task: dict[str, Any]) -> list[str]:
     return urls
 
 
-def download_images(urls: list[str], task_id: str) -> list[Path]:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+def download_images(
+    urls: list[str],
+    task_id: str,
+    output_dir: Path = OUTPUT_DIR,
+) -> list[Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
     paths: list[Path] = []
     for index, url in enumerate(urls, start=1):
         suffix = suffix_from_url(url) or ".png"
         if suffix == ".jpeg":
             suffix = ".jpg"
-        path = OUTPUT_DIR / f"{timestamp}-{task_id}-{index}{suffix}"
+        filename = f"{task_id}{suffix}" if len(urls) == 1 else f"{task_id}-{index}{suffix}"
+        path = output_dir / filename
         request = urllib.request.Request(
             url,
             headers={
@@ -268,6 +272,10 @@ def join_url(base_url: str, path: str) -> str:
     return base_url.rstrip("/") + "/" + path.lstrip("/")
 
 
+def timestamped_output_dir(base_dir: Path = OUTPUT_DIR) -> Path:
+    return base_dir / datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
 def main() -> int:
     load_dotenv()
     args = parse_args()
@@ -291,7 +299,7 @@ def main() -> int:
         print(f"任务已提交: {task_id}", flush=True)
         task = poll_task(args, api_key, task_id)
         urls = collect_image_urls(task)
-        paths = download_images(urls, task_id)
+        paths = download_images(urls, task_id, timestamped_output_dir())
     except (ApiError, TimeoutError) as exc:
         print(f"错误: {exc}", file=sys.stderr)
         return 1

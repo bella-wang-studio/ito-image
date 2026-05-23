@@ -10,6 +10,7 @@
 IMAGE_BASE_URL="https://api.apimart.ai"
 IMAGE_API_KEY="你的生图接口密钥"
 IMAGE_MODEL="gpt-image-2"
+IMAGE_GENERATION_COUNT="9"
 
 CHAT_BASE_URL="你的对话接口 Base URL"
 CHAT_API_KEY="你的对话接口密钥"
@@ -51,6 +52,8 @@ uv run image "星空下的古老城堡"
 ```
 
 生成完成后，图片会保存到同目录的 `output/` 文件夹。
+
+运行 `main.py` 自动生成产品图时，`IMAGE_GENERATION_COUNT` 控制一次生成几张图，默认是 9。每次运行会在 `output/` 下创建一个本次专属文件夹，所有图片都会放到同一个文件夹里。
 
 生成 2K 横图：
 
