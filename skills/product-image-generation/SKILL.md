@@ -84,7 +84,7 @@ uv run save-prompts --run-dir "$RUN_DIR" reverse "style-only reverse prompt"
 
 ### 3. 生成英文生图提示词
 
-调用 `uv run chat` 生成 JSON 数组，长度等于请求张数。不要单独反推或生成服装提示词；服装、造型、姿态或场景变化直接写进每条最终提示词。
+调用 `uv run chat` 生成 JSON 数组，长度等于请求张数。不要单独反推或生成服装提示词；服装、造型、姿态或场景变化直接写进每条提示词。
 
 传入上下文：
 
@@ -92,13 +92,12 @@ uv run save-prompts --run-dir "$RUN_DIR" reverse "style-only reverse prompt"
 - 所选产品颜色目录下的正面图和其他产品图。
 - 所选模特图片。
 - 产品描述 `.md` 和模特描述 `.md` 文本。
-- 已提取的产品长宽高和人物身高。
+- 已提取的产品长宽高和人物身高仅用于后续拼接，不要求 `uv run chat` 写入提示词。
 
 每条英文生图提示词必须包含：
 
 - 指定模特、指定产品、指定颜色。
 - 必要的服装、造型、姿态或场景设定。
-- 人物身高、产品长宽高，并强调按真实尺寸控制产品比例。
 - 保持产品外形、结构、比例、颜色、材质、五金、缝线、肩带/提手、开口等可见细节。
 - 不猜想、不简化、不重设计产品轮廓和结构。
 - 透视、接触点、镜头角度、阴影、反射和场景深度自然一致，避免漂浮、贴合错误或透视错位。
@@ -106,7 +105,15 @@ uv run save-prompts --run-dir "$RUN_DIR" reverse "style-only reverse prompt"
 
 提示词之间共享参考图调性，但场景、姿态、构图或创意方向要有差异。
 
-生成生图提示词后，立即追加到提示词记录文件：
+拿到生图提示词后，先在每条提示词末尾机械拼接模特身高和产品三维信息，再用于记录和生图。不要让 `uv run chat` 自己生成或改写这些尺寸信息。
+
+拼接格式：
+
+```text
+ Model height: <模特身高>. Product dimensions: <产品长宽高>. Use these real measurements to keep the product scale accurate on the model.
+```
+
+生成拼接后的最终提示词后，立即追加到提示词记录文件：
 
 ```bash
 uv run save-prompts --run-dir "$RUN_DIR" image "prompt 1" "prompt 2" "prompt 3"
@@ -114,10 +121,10 @@ uv run save-prompts --run-dir "$RUN_DIR" image "prompt 1" "prompt 2" "prompt 3"
 
 ### 4. 提交生图任务
 
-对第 3 步的每条英文提示词各调用一次 `uv run image --n 4`：
+对第 3 步拼接尺寸信息后的每条最终英文提示词各调用一次 `uv run image --n 4`：
 
 ```bash
-uv run image "第 N 条英文生图提示词" \
+uv run image "第 N 条最终英文生图提示词" \
   --n 4 \
   --image-file "source/模特/<模特名>.<ext>" \
   --image-file "source/产品/<产品名>/<颜色名>/正面.<ext>" \
