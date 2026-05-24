@@ -10,7 +10,10 @@ __pycache__/
 
 # Image
 output/
-source/
+source/**/*.png
+source/**/*.jpg
+source/**/*.jpeg
+source/**/*.webp
 
 # Logs
 logs/
