@@ -102,6 +102,9 @@ uv run save-prompts --run-dir "$RUN_DIR" reverse "style-only reverse prompt"
 - 保持产品外形、结构、比例、颜色、材质、五金、缝线、肩带/提手、开口等可见细节。
 - 不猜想、不简化、不重设计产品轮廓和结构。
 - 透视、接触点、镜头角度、阴影、反射和场景深度自然一致，避免漂浮、贴合错误或透视错位。
+- 产品颜色、logo、拉链/锁扣外观、五金细节、尺寸比例必须与白底参考图完全一致，零偏差——这是不可违反的硬规则。
+- Logo 必须清晰可辨且完整展示，不可模糊、遮挡或变形。
+- 产品不可被重设计、简化或艺术化改造；必须如同把白底图上的真实产品直接放入场景。
 - 不添加海报式文字、标题字、宣传语、字幕、水印、UI 或装饰性文字覆盖层；场景自然文字和产品已有文字可以出现。
 
 提示词之间共享参考图调性，但场景、姿态、构图或创意方向要有差异。
@@ -111,7 +114,7 @@ uv run save-prompts --run-dir "$RUN_DIR" reverse "style-only reverse prompt"
 拼接格式：
 
 ```text
- Model height: <模特身高>. Product dimensions: <产品长宽高>. Use these real measurements to keep the product scale accurate on the model.
+ Model height: <模特身高>. Product dimensions: <产品长宽高>. Use these real measurements to keep the product scale accurate on the model. CRITICAL: the product must be an exact pixel-perfect match to the white-background reference photos — identical color, logo (clearly visible and legible), zipper/hardware appearance, proportions, and material texture. Zero deviation from the reference is allowed.
 ```
 
 生成拼接后的最终提示词后，立即追加到提示词记录文件：

@@ -23,4 +23,4 @@ Visual style:
 modern minimalist travel accessory, light but durable fabric texture, clean seams, soft utility silhouette, organized interior, polished hardware detail, practical premium feel, suitable for a stylish high-consumption urban woman moving between office, airport, boutique hotel, cafe, gallery, and weekend travel.
 
 Prompt emphasis:
-show the tote clearly as the hero product, keep the 16L size believable and compact, highlight lightweight fabric, refined organization, everyday travel function, and contemporary ITO brand aesthetics.
+show the tote clearly as the hero product. The bag MUST be an exact match to the white-background reference photos — identical color, ITO logo clearly visible and legible, Duraflex Aluminum Tensionlock hardware accurately rendered, zipper appearance and size matching reference, CORDURA fabric texture true to reference, 16L proportions accurate relative to the model. Zero deviation from reference is allowed; do not redesign, simplify, or artistically alter the product. When in doubt, the white-background reference photo is the absolute authority.
