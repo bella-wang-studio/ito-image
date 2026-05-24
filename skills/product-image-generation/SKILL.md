@@ -75,12 +75,24 @@ ffmpeg -y -i "原图路径" -vf "scale='min(1200,iw)':'min(1200,ih)':force_origi
 
 如果压缩后仍超过 500KB，逐步提高到 `-q:v 7`、`-q:v 9`，直到不超过 500KB 且最长边不超过 1200px。
 
-让 `uv run chat` 只输出一套英文 `style-only reverse prompt`：描述摄影、构图、镜头、光线、色彩、材质、后期调性和商业大片气质；不要绑定具体人物、产品、品牌、固定物件或可读文字。
+让 `uv run chat` 输出两部分英文内容，用 `---` 分隔：
+
+**第一部分：style-only reverse prompt** -- 描述摄影、构图、镜头、光线、色彩、材质、后期调性和商业大片气质；不要绑定具体人物、产品、品牌、固定物件或可读文字。
+
+**第二部分：scene description** -- 描述参考图中的场景类型和空间特征（如热带度假村泳池、海边步道、城市巷子、花园庭院等），以及场景中的建筑/自然元素（如白墙、棕榈树、水面、鹅卵石等）。如果多张参考图场景不同，分别描述每类场景并标注出现频率。只描述场景，不描述风格或人物。
 
 生成反推提示词后，立即写入提示词记录文件：
 
 ```bash
 uv run save-prompts --run-dir "$RUN_DIR" reverse "style-only reverse prompt"
+```
+
+将 scene description 追加到同一记录文件：
+
+```bash
+echo "" >> "prompts/$(basename $RUN_DIR).txt"
+echo "[SCENE DESCRIPTION]" >> "prompts/$(basename $RUN_DIR).txt"
+echo "$SCENE_DESCRIPTION" >> "prompts/$(basename $RUN_DIR).txt"
 ```
 
 ### 3. 生成英文生图提示词
@@ -90,10 +102,13 @@ uv run save-prompts --run-dir "$RUN_DIR" reverse "style-only reverse prompt"
 传入上下文：
 
 - 第 2 步的英文 `style-only reverse prompt`。
+- 第 2 步的英文 `scene description`（参考图场景描述）。
 - 所选产品颜色目录下的正面图和其他产品图。
 - 所选模特图片。
 - 产品描述 `.md` 和模特描述 `.md` 文本。
 - 已提取的产品长宽高和人物身高仅用于后续拼接，不要求 `uv run chat` 写入提示词。
+
+场景约束规则：scene description 优先于模特 .md 中的 Scene direction。生图提示词中的场景必须与 scene description 描述的场景类型一致；只有在 scene description 为空或非常模糊时，才可从模特 Scene direction 中选取场景。
 
 每条英文生图提示词必须包含：
 
@@ -107,7 +122,7 @@ uv run save-prompts --run-dir "$RUN_DIR" reverse "style-only reverse prompt"
 - 产品不可被重设计、简化或艺术化改造；必须如同把白底图上的真实产品直接放入场景。
 - 不添加海报式文字、标题字、宣传语、字幕、水印、UI 或装饰性文字覆盖层；场景自然文字和产品已有文字可以出现。
 
-提示词之间共享参考图调性，但场景、姿态、构图或创意方向要有差异。
+提示词之间共享参考图调性。场景必须从 Step 2 提取的 scene description 中选取或衍生，不得偏离参考图的场景类型；如果 scene description 中有多个场景类型，可在不同提示词中分配不同场景类型以增加差异。姿态、构图或创意方向可以有差异。
 
 拿到生图提示词后，先在每条提示词末尾机械拼接模特身高和产品三维信息，再用于记录和生图。不要让 `uv run chat` 自己生成或改写这些尺寸信息。
 
