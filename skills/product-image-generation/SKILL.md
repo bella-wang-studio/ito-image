@@ -79,7 +79,7 @@ ffmpeg -y -i "原图路径" -vf "scale='min(1200,iw)':'min(1200,ih)':force_origi
 
 **第一部分：style-only reverse prompt** -- 描述摄影、构图、镜头、光线、色彩、材质、后期调性和商业大片气质；不要绑定具体人物、产品、品牌、固定物件或可读文字。
 
-**第二部分：scene description** -- 描述参考图中的场景类型和空间特征（如热带度假村泳池、海边步道、城市巷子、花园庭院等），以及场景中的建筑/自然元素（如白墙、棕榈树、水面、鹅卵石等）。如果多张参考图场景不同，分别描述每类场景并标注出现频率。只描述场景，不描述风格或人物。
+**第二部分：scene description** -- 描述参考图中的场景类型和空间特征，以及场景中的建筑/自然元素。如果多张参考图场景不同，分别描述每类场景并标注出现频率。只描述场景，不描述风格或人物。
 
 生成反推提示词后，立即写入提示词记录文件：
 
@@ -121,6 +121,7 @@ echo "$SCENE_DESCRIPTION" >> "prompts/$(basename $RUN_DIR).txt"
 - Logo 必须清晰可辨且完整展示，不可模糊、遮挡或变形。
 - 产品不可被重设计、简化或艺术化改造；必须如同把白底图上的真实产品直接放入场景。
 - 不添加海报式文字、标题字、宣传语、字幕、水印、UI 或装饰性文字覆盖层；场景自然文字和产品已有文字可以出现。
+- 必须从模特描述的"真实感锚点 / Realism Anchors"中选取至少 3 项具体细节写入提示词，不能只写"realistic skin"之类的笼统描述。例如应写 "visible fine pores on the nose tip, subtle T-zone sheen contrasting with matte cheeks, one eye slightly narrower than the other" 而非 "realistic skin texture"。
 
 提示词之间共享参考图调性。场景必须从 Step 2 提取的 scene description 中选取或衍生，不得偏离参考图的场景类型；如果 scene description 中有多个场景类型，可在不同提示词中分配不同场景类型以增加差异。姿态、构图或创意方向可以有差异。
 
@@ -129,7 +130,7 @@ echo "$SCENE_DESCRIPTION" >> "prompts/$(basename $RUN_DIR).txt"
 拼接格式：
 
 ```text
- Model height: <模特身高>. Product dimensions: <产品长宽高>. Use these real measurements to keep the product scale accurate on the model. CRITICAL: the product must be an exact pixel-perfect match to the white-background reference photos — identical color, logo (clearly visible and legible), zipper/hardware appearance, proportions, and material texture. Zero deviation from the reference is allowed.
+ Model height: <模特身高>. Product dimensions: <产品长宽高>. Use these real measurements to keep the product scale accurate on the model. ANTIREALISM: the person must look like a real photograph, not an AI render — visible skin pores, uneven skin tone zones (T-zone sheen vs matte cheeks, nose-wing redness), slight facial asymmetry, natural lip texture with wet-dry boundary, non-uniform eyelash direction. No airbrushed skin, no poreless uniform complexion, no perfectly symmetric features, no waxy translucent skin sheen, no beauty-camera smoothing. CRITICAL: the product must be an exact pixel-perfect match to the white-background reference photos — identical color, logo (clearly visible and legible), zipper/hardware appearance, proportions, and material texture. Zero deviation from the reference is allowed.
 ```
 
 生成拼接后的最终提示词后，立即追加到提示词记录文件：
