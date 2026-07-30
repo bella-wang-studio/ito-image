@@ -13,7 +13,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from app.domain.errors import (
+    InvalidBoundingBoxError,
+    InvalidDimensionError,
+    InvalidProfileError,
+    LayoutOverflowError,
+    ProfileFileNotFoundError,
+    UnsupportedProfileFormatError,
+)
 from app.domain.generation_job import FINAL_STATUSES, RUNNING_STATUSES, GenerationJob
+from app.domain.layout import LayoutRequest
 from app.providers.base import ProviderError
 from app.providers.gpt_image import (
     GptImageProvider,
@@ -22,6 +31,12 @@ from app.providers.gpt_image import (
     request_json as provider_request_json,
 )
 from app.schemas.job import GenerationRequest, PollingConfig, ProviderConfig
+from app.schemas.layout import CanvasSpec, LayoutPlan, PersonPlacement
+from app.services.asset_loader import load_model_profile, load_product_profile
+from app.services.layout_service import (
+    create_layout_plan,
+    format_layout_constraints,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -31,12 +46,25 @@ USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
 
 ApiError = ProviderError
 
+LAYOUT_ERRORS = (
+    ProfileFileNotFoundError,
+    InvalidProfileError,
+    InvalidDimensionError,
+    InvalidBoundingBoxError,
+    LayoutOverflowError,
+    UnsupportedProfileFormatError,
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="通过配置的图片生成模型生成图片，并下载到 output 目录。"
     )
-    parser.add_argument("prompt", help="图片生成提示词")
+    parser.add_argument(
+        "prompt",
+        nargs="?",
+        help="图片生成提示词；使用 --layout-only 时可省略",
+    )
     parser.add_argument("--size", default="3:4", help="画面比例或像素尺寸，默认 3:4 竖图")
     parser.add_argument(
         "--resolution",
@@ -96,7 +124,125 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="图片保存目录；不传则在 output 下按当前时间创建子文件夹",
     )
+    parser.add_argument(
+        "--product-profile",
+        type=Path,
+        help="商品 JSON Profile 路径",
+    )
+    parser.add_argument(
+        "--model-profile",
+        type=Path,
+        help="模特 JSON Profile 路径",
+    )
+    parser.add_argument(
+        "--person-bbox",
+        nargs=4,
+        type=int,
+        metavar=("X", "Y", "WIDTH", "HEIGHT"),
+        help="人物边界框：X Y WIDTH HEIGHT",
+    )
+    parser.add_argument(
+        "--canvas-size",
+        nargs=2,
+        type=int,
+        metavar=("WIDTH", "HEIGHT"),
+        help="画布尺寸：WIDTH HEIGHT",
+    )
+    parser.add_argument(
+        "--product-side",
+        choices=("left", "right"),
+        help="商品位于人物左侧或右侧",
+    )
+    parser.add_argument(
+        "--ground-y",
+        type=int,
+        help="人物与商品所在的地面线 Y 坐标",
+    )
+    parser.add_argument(
+        "--perspective-factor",
+        type=float,
+        help="商品透视缩放因子，默认 1.0",
+    )
+    parser.add_argument(
+        "--layout-output",
+        type=Path,
+        help="将 LayoutPlan 保存为 JSON",
+    )
+    parser.add_argument(
+        "--layout-only",
+        action="store_true",
+        help="只计算并输出布局 JSON，不调用图片生成 API",
+    )
     return parser.parse_args()
+
+
+def has_layout_options(args: argparse.Namespace) -> bool:
+    return any(
+        (
+            args.product_profile is not None,
+            args.model_profile is not None,
+            args.person_bbox is not None,
+            args.canvas_size is not None,
+            args.product_side is not None,
+            args.ground_y is not None,
+            args.perspective_factor is not None,
+            args.layout_output is not None,
+            args.layout_only,
+        )
+    )
+
+
+def build_layout_request(args: argparse.Namespace) -> LayoutRequest:
+    required_options = {
+        "--product-profile": args.product_profile,
+        "--model-profile": args.model_profile,
+        "--person-bbox": args.person_bbox,
+        "--canvas-size": args.canvas_size,
+        "--product-side": args.product_side,
+        "--ground-y": args.ground_y,
+    }
+    missing = [
+        option
+        for option, value in required_options.items()
+        if value is None
+    ]
+    if missing:
+        raise InvalidProfileError(
+            "布局参数不完整，缺少: " + ", ".join(missing)
+        )
+
+    canvas_width, canvas_height = args.canvas_size
+    person_x, person_y, person_width, person_height = args.person_bbox
+    return LayoutRequest(
+        canvas=CanvasSpec(
+            width_px=canvas_width,
+            height_px=canvas_height,
+        ),
+        person=PersonPlacement(
+            x=person_x,
+            y=person_y,
+            width_px=person_width,
+            height_px=person_height,
+        ),
+        model_profile=load_model_profile(args.model_profile),
+        product_profile=load_product_profile(args.product_profile),
+        product_side=args.product_side,
+        ground_y=args.ground_y,
+        perspective_factor=(
+            1.0
+            if args.perspective_factor is None
+            else args.perspective_factor
+        ),
+    )
+
+
+def layout_plan_json(plan: LayoutPlan) -> str:
+    return json.dumps(plan.to_dict(), ensure_ascii=False, indent=2)
+
+
+def save_layout_plan(plan: LayoutPlan, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(layout_plan_json(plan) + "\n", encoding="utf-8")
 
 
 def request_json(
@@ -268,6 +414,31 @@ def timestamped_output_dir(base_dir: Path = OUTPUT_DIR) -> Path:
 def main() -> int:
     load_dotenv()
     args = parse_args()
+
+    if has_layout_options(args):
+        try:
+            layout_request = build_layout_request(args)
+            layout_plan = create_layout_plan(layout_request)
+            if args.layout_output is not None:
+                save_layout_plan(layout_plan, args.layout_output)
+        except LAYOUT_ERRORS as exc:
+            print(f"错误: {exc}", file=sys.stderr)
+            return 2
+
+        if args.layout_only:
+            print(layout_plan_json(layout_plan))
+            return 0
+        if not args.prompt:
+            print("错误: 启用图片生成时必须提供 prompt。", file=sys.stderr)
+            return 2
+        args.prompt = (
+            f"{args.prompt}\n\n"
+            f"{format_layout_constraints(layout_request, layout_plan)}"
+        )
+    elif not args.prompt:
+        print("错误: 必须提供 prompt。", file=sys.stderr)
+        return 2
+
     api_key = os.getenv(args.env)
     if not api_key:
         print(f"请先在环境变量或 .env 中设置 {args.env}。", file=sys.stderr)

@@ -1,0 +1,15 @@
+{
+  "sku": "PISTACHIO-2-20",
+  "name": "PISTACHIO 2 STRIPED TRUNK 20 Inch",
+  "category": "hard_luggage",
+  "width_cm": 35,
+  "height_cm": 55,
+  "depth_cm": 23,
+  "hero_image": "front.png",
+  "views": {
+    "front": "front.png",
+    "angle_45": "angle_45.png"
+  },
+  "include_wheels_in_height": true,
+  "include_handle_in_height": false
+}
