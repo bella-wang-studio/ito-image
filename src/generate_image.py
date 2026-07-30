@@ -6,7 +6,6 @@ import json
 import mimetypes
 import os
 import sys
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -14,17 +13,23 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from app.domain.generation_job import FINAL_STATUSES, RUNNING_STATUSES, GenerationJob
+from app.providers.base import ProviderError
+from app.providers.gpt_image import (
+    GptImageProvider,
+    join_url as provider_join_url,
+    parse_image_urls,
+    request_json as provider_request_json,
+)
+from app.schemas.job import GenerationRequest, PollingConfig, ProviderConfig
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 OUTPUT_DIR = PROJECT_ROOT / "output"
 ENV_FILE = PROJECT_ROOT / ".env"
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-FINAL_STATUSES = {"completed", "failed", "cancelled"}
-RUNNING_STATUSES = {"submitted", "in_progress", "pending", "processing"}
 
-
-class ApiError(RuntimeError):
-    pass
+ApiError = ProviderError
 
 
 def parse_args() -> argparse.Namespace:
@@ -100,34 +105,7 @@ def request_json(
     api_key: str,
     payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    body = None
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Accept": "application/json",
-        "User-Agent": USER_AGENT,
-    }
-    if payload is not None:
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        headers["Content-Type"] = "application/json"
-
-    request = urllib.request.Request(url, data=body, headers=headers, method=method)
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            response_body = response.read().decode("utf-8")
-    except urllib.error.HTTPError as exc:
-        error_body = exc.read().decode("utf-8", errors="replace")
-        raise ApiError(f"HTTP {exc.code}: {error_body}") from exc
-    except urllib.error.URLError as exc:
-        raise ApiError(f"请求失败: {exc.reason}") from exc
-
-    try:
-        data = json.loads(response_body)
-    except json.JSONDecodeError as exc:
-        raise ApiError(f"响应不是合法 JSON: {response_body[:500]}") from exc
-
-    if data.get("code") != 200:
-        raise ApiError(f"API 返回错误: {json.dumps(data, ensure_ascii=False)}")
-    return data
+    return provider_request_json(method, url, api_key, payload)
 
 
 def load_dotenv(path: Path = ENV_FILE) -> None:
@@ -147,23 +125,15 @@ def load_dotenv(path: Path = ENV_FILE) -> None:
 
 def submit_task(args: argparse.Namespace, api_key: str) -> str:
     image_urls = build_image_inputs(args.image_urls, args.image_files)
-    payload: dict[str, Any] = {
-        "model": args.model,
-        "prompt": args.prompt,
-        "n": args.n,
-        "size": args.size,
-        "resolution": args.resolution,
-        "official_fallback": args.official_fallback,
-    }
-    if image_urls:
-        payload["image_urls"] = image_urls
-
-    url = join_url(args.base_url, "/v1/images/generations")
-    data = request_json("POST", url, api_key, payload)
-    items = data.get("data") or []
-    if not items or not items[0].get("task_id"):
-        raise ApiError(f"提交成功但未找到 task_id: {json.dumps(data, ensure_ascii=False)}")
-    return str(items[0]["task_id"])
+    request = GenerationRequest(
+        prompt=args.prompt,
+        size=args.size,
+        resolution=args.resolution,
+        n=args.n,
+        image_urls=tuple(image_urls),
+        official_fallback=args.official_fallback,
+    )
+    return _provider_from_args(args, api_key).submit(request)
 
 
 def build_image_inputs(
@@ -192,40 +162,41 @@ def image_file_to_data_uri(path: Path) -> str:
 
 
 def poll_task(args: argparse.Namespace, api_key: str, task_id: str) -> dict[str, Any]:
-    deadline = time.monotonic() + args.timeout
-    if args.initial_delay > 0:
-        time.sleep(args.initial_delay)
+    polling = PollingConfig(
+        initial_delay=args.initial_delay,
+        poll_interval=args.poll_interval,
+        timeout=args.timeout,
+    )
+    job = _provider_from_args(args, api_key).wait_for_completion(
+        task_id,
+        polling,
+        on_update=_print_job_update,
+    )
+    return dict(job.raw)
 
-    while True:
-        query = urllib.parse.urlencode({"language": "zh"})
-        url = join_url(args.base_url, f"/v1/tasks/{urllib.parse.quote(task_id)}?{query}")
-        data = request_json("GET", url, api_key)
-        task = data.get("data") or {}
-        status = str(task.get("status", "")).lower()
-        progress = task.get("progress")
-        progress_text = f", progress={progress}%" if progress is not None else ""
-        print(f"任务状态: {status or 'unknown'}{progress_text}", flush=True)
 
-        if status == "completed":
-            return task
-        if status in {"failed", "cancelled"}:
-            raise ApiError(f"任务结束但未成功: {json.dumps(task, ensure_ascii=False)}")
-        if status and status not in RUNNING_STATUSES | FINAL_STATUSES:
-            print(f"收到未知状态 {status!r}，继续轮询。", flush=True)
-        if time.monotonic() >= deadline:
-            raise TimeoutError(f"任务 {task_id} 在 {args.timeout} 秒内未完成")
-        time.sleep(args.poll_interval)
+def _provider_from_args(
+    args: argparse.Namespace,
+    api_key: str,
+) -> GptImageProvider:
+    return GptImageProvider(
+        ProviderConfig(
+            base_url=args.base_url,
+            api_key=api_key,
+            model=args.model,
+        )
+    )
+
+
+def _print_job_update(job: GenerationJob) -> None:
+    progress_text = f", progress={job.progress}%" if job.progress is not None else ""
+    print(f"任务状态: {job.status or 'unknown'}{progress_text}", flush=True)
+    if job.status and job.status not in RUNNING_STATUSES | FINAL_STATUSES:
+        print(f"收到未知状态 {job.status!r}，继续轮询。", flush=True)
 
 
 def collect_image_urls(task: dict[str, Any]) -> list[str]:
-    images = ((task.get("result") or {}).get("images")) or []
-    urls: list[str] = []
-    for image in images:
-        value = image.get("url") if isinstance(image, dict) else None
-        if isinstance(value, str):
-            urls.append(value)
-        elif isinstance(value, list):
-            urls.extend(str(item) for item in value if item)
+    urls = [image.url for image in parse_image_urls(task)]
     if not urls:
         raise ApiError(f"任务已完成但未找到图片 URL: {json.dumps(task, ensure_ascii=False)}")
     return urls
@@ -287,7 +258,7 @@ def suffix_from_url(url: str) -> str:
 
 
 def join_url(base_url: str, path: str) -> str:
-    return base_url.rstrip("/") + "/" + path.lstrip("/")
+    return provider_join_url(base_url, path)
 
 
 def timestamped_output_dir(base_dir: Path = OUTPUT_DIR) -> Path:
