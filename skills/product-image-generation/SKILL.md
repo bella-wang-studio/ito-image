@@ -31,6 +31,7 @@ uv run image "英文生图提示词" --image-file "模特图" --image-file "产�
 - 模特图片：`source/模特/<模特名>.<jpg|jpeg|png|webp>`
 - 模特描述：`source/模特/<模特名>.md`
 - 参考图：`source/参考图/`
+- 场景描述：`source/场景.md`
 
 产品图使用所选颜色目录下的全部图片；正面图用于重点识别，扩展名以实际文件为准。
 
@@ -79,7 +80,7 @@ ffmpeg -y -i "原图路径" -vf "scale='min(1200,iw)':'min(1200,ih)':force_origi
 
 **第一部分：style-only reverse prompt** -- 描述摄影、构图、镜头、光线、色彩、材质、后期调性和商业大片气质；不要绑定具体人物、产品、品牌、固定物件或可读文字。
 
-**第二部分：scene description** -- 描述参考图中的场景类型和空间特征，以及场景中的建筑/自然元素。如果多张参考图场景不同，分别描述每类场景并标注出现频率。只描述场景，不描述风格或人物。
+**第二部分：scene description** -- 描述参考图中的场景类型和空间特征，以及场景中的建筑/自然元素。如果多张参考图场景不同，分别描述每类场景并标注出现频率。只描述场景，不描述风格或人物。如果同一场景类型在参考图中占比超过 60%，必须在此部分末尾追加一个 `[DIVERSITY NOTE]` 段落，标注集中度并建议从 `source/场景.md` 中选取其他场景类型以补充多样性。例如：`[DIVERSITY NOTE: 3/5 reference images are Elevated Coastal Walkways with railings. To avoid repetitive backgrounds, supplement with scenes from 场景.md such as Tropical Garden Market, Moroccan Courtyard, or Coastal Cliff Garden.]`
 
 生成反推提示词后，立即写入提示词记录文件：
 
@@ -106,9 +107,16 @@ echo "$SCENE_DESCRIPTION" >> "prompts/$(basename $RUN_DIR).txt"
 - 所选产品颜色目录下的正面图和其他产品图。
 - 所选模特图片。
 - 产品描述 `.md` 和模特描述 `.md` 文本。
+- `source/场景.md` 文本内容。
 - 已提取的产品长宽高和人物身高仅用于后续拼接，不要求 `uv run chat` 写入提示词。
 
-场景约束规则：scene description 优先于模特 .md 中的 Scene direction。生图提示词中的场景必须与 scene description 描述的场景类型一致；只有在 scene description 为空或非常模糊时，才可从模特 Scene direction 中选取场景。
+场景约束规则：生图提示词的场景来源按以下优先级选取：
+1. 如果 scene description 包含 `[DIVERSITY NOTE]`，则从 `source/场景.md` 中选取与 DIVERSITY NOTE 建议的不同场景类型，分配到不同提示词中，确保至少 40% 的提示词使用非参考图主导场景。
+2. 如果 scene description 中有多个场景类型且分布较均匀（无单一类型超过 60%），则从中选取和衍生。
+3. 如果 scene description 为空或非常模糊，可从模特 .md 中的视觉方向选取场景。
+4. 任何情况下，禁止连续两条提示词使用相同的场景类型；同一批次中，同一种场景类型出现不超过总提示词数的 40%。
+
+构图约束：每条提示词必须包含人物在画面中的比例控制。人物（从头到脚或从头顶到画面中最下端可见的身体部分）不得超过画面面积的 50%。提示词中必须包含类似以下表述："medium to full shot, figure occupies no more than half the frame, ample environmental space visible"。禁止使用 "close-up portrait"、"headshot"、"filling the frame" 等导致人物占满画面的构图指令。
 
 每条英文生图提示词必须包含：
 
@@ -122,8 +130,9 @@ echo "$SCENE_DESCRIPTION" >> "prompts/$(basename $RUN_DIR).txt"
 - 产品不可被重设计、简化或艺术化改造；必须如同把白底图上的真实产品直接放入场景。
 - 不添加海报式文字、标题字、宣传语、字幕、水印、UI 或装饰性文字覆盖层；场景自然文字和产品已有文字可以出现。
 - 必须从模特描述的"真实感锚点 / Realism Anchors"中选取至少 3 项具体细节写入提示词，不能只写"realistic skin"之类的笼统描述。例如应写 "visible fine pores on the nose tip, subtle T-zone sheen contrasting with matte cheeks, one eye slightly narrower than the other" 而非 "realistic skin texture"。
+- 明确的场景描述，包含具体的环境元素（不只是一种表面或一种建筑构件），场景描述中的环境细节不得少于 3 种具体元素。
 
-提示词之间共享参考图调性。场景必须从 Step 2 提取的 scene description 中选取或衍生，不得偏离参考图的场景类型；如果 scene description 中有多个场景类型，可在不同提示词中分配不同场景类型以增加差异。姿态、构图或创意方向可以有差异。
+提示词之间共享参考图调性。场景按上述"场景约束规则"选取。姿态、构图或创意方向可以有差异。
 
 拿到生图提示词后，先在每条提示词末尾机械拼接模特身高和产品三维信息，再用于记录和生图。不要让 `uv run chat` 自己生成或改写这些尺寸信息。
 
