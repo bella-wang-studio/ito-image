@@ -7,6 +7,7 @@ SUPPORTED_RESOLUTIONS = frozenset({"1k", "2k", "4k"})
 MAX_REFERENCE_IMAGES = 16
 
 
+
 @dataclass(frozen=True)
 class ProviderConfig:
     base_url: str
